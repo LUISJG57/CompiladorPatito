@@ -1,0 +1,11 @@
+programa test;
+nula saludar(nombre : entero) {
+    {
+        escribe(nombre);
+    }
+};
+inicio
+{
+    saludar(42);
+}
+fin

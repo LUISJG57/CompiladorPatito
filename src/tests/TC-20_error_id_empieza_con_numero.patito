@@ -1,0 +1,8 @@
+programa test;
+vars
+    x : entero;
+inicio
+{
+    1variable = 5;
+}
+fin

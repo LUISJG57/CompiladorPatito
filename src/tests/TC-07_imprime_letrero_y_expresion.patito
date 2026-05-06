@@ -1,0 +1,8 @@
+programa test;
+vars
+    x : entero;
+inicio
+{
+    escribe("hola mundo", x + 1);
+}
+fin

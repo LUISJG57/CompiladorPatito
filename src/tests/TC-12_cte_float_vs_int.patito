@@ -1,0 +1,10 @@
+programa test;
+vars
+    f : flotante;
+    i : entero;
+inicio
+{
+    f = 3.14;
+    i = 3;
+}
+fin

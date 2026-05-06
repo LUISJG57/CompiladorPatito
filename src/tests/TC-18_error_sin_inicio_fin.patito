@@ -1,0 +1,4 @@
+programa test;
+{
+    x = 1;
+}

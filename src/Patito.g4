@@ -19,7 +19,7 @@ ESCRIBE: 'escribe';
 // identificadores y constantes
 CTE_FLOAT: [0-9]+ '.' [0-9]+; //CTE_FLOAT antes que CTE_INT para que ANTLR no consuma solo los dígitos
 CTE_INT: [0-9]+;
-LETRERO   : '"' ~["\r\n]* '"' ;
+LETRERO   : '"' .*? '"' ;
 
 // operadores aritmeticos
 MAS: '+';
@@ -49,6 +49,8 @@ DOSPUNTOS: ':';
 
 // ID va al final para no capturar palabras reservadas)
 ID: [a-zA-Z][a-zA-Z0-9]*;
+
+WS: [ \t\r\n]+ -> skip;
 
 
 

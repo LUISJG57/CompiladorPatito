@@ -1,0 +1,10 @@
+programa test;
+vars
+    x, y : entero;
+inicio
+{
+    si (x == y) {
+        x = 1;
+    };
+}
+fin

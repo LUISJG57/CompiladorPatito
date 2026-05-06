@@ -1,0 +1,8 @@
+programa test;
+vars
+    a, b, c, resultado : entero;
+inicio
+{
+    resultado = (a + b) * c / 2;
+}
+fin

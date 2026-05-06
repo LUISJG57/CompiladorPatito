@@ -1,0 +1,7 @@
+programa test;
+inicio
+{
+    escribe("linea uno
+linea dos");
+}
+fin

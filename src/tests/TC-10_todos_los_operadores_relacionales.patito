@@ -1,0 +1,11 @@
+programa test;
+vars
+    a, b, r : entero;
+inicio
+{
+    si (a == b) { r = 1; };
+    si (a != b) { r = 2; };
+    si (a < b)  { r = 3; };
+    si (a > b)  { r = 4; };
+}
+fin

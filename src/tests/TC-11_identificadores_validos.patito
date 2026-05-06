@@ -1,0 +1,7 @@
+programa test;
+vars
+    miVar, var1, x, unaVariable123 : entero;
+inicio
+{
+}
+fin
