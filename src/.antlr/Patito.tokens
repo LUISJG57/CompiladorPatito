@@ -32,6 +32,7 @@ COMA=31
 PUNTOYCOMA=32
 DOSPUNTOS=33
 ID=34
+WS=35
 'programa'=1
 'vars'=2
 'inicio'=3

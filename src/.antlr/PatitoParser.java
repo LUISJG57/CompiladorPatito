@@ -21,7 +21,7 @@ public class PatitoParser extends Parser {
 		MAS=16, MENOS=17, POR=18, ENTRE=19, DIFERENTE=20, IGUAL=21, MENORQUE=22, 
 		MAYORQUE=23, ASIGNA=24, PARENTESISIZQ=25, PARENTESISDER=26, LLAVEIZQ=27, 
 		LLAVEDER=28, CORCHIZQ=29, CORCHDER=30, COMA=31, PUNTOYCOMA=32, DOSPUNTOS=33, 
-		ID=34;
+		ID=34, WS=35;
 	public static final int
 		RULE_programa = 0, RULE_varsOpcional = 1, RULE_funcsOpcional = 2, RULE_vars = 3, 
 		RULE_listDecl = 4, RULE_listId = 5, RULE_listIdComa = 6, RULE_tipo = 7, 
@@ -61,7 +61,7 @@ public class PatitoParser extends Parser {
 			"SI", "SINO", "MIENTRAS", "HAZ", "ESCRIBE", "CTE_FLOAT", "CTE_INT", "LETRERO", 
 			"MAS", "MENOS", "POR", "ENTRE", "DIFERENTE", "IGUAL", "MENORQUE", "MAYORQUE", 
 			"ASIGNA", "PARENTESISIZQ", "PARENTESISDER", "LLAVEIZQ", "LLAVEDER", "CORCHIZQ", 
-			"CORCHDER", "COMA", "PUNTOYCOMA", "DOSPUNTOS", "ID"
+			"CORCHDER", "COMA", "PUNTOYCOMA", "DOSPUNTOS", "ID", "WS"
 		};
 	}
 	private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
@@ -2082,7 +2082,7 @@ public class PatitoParser extends Parser {
 	}
 
 	public static final String _serializedATN =
-		"\u0004\u0001\"\u0133\u0002\u0000\u0007\u0000\u0002\u0001\u0007\u0001\u0002"+
+		"\u0004\u0001#\u0133\u0002\u0000\u0007\u0000\u0002\u0001\u0007\u0001\u0002"+
 		"\u0002\u0007\u0002\u0002\u0003\u0007\u0003\u0002\u0004\u0007\u0004\u0002"+
 		"\u0005\u0007\u0005\u0002\u0006\u0007\u0006\u0002\u0007\u0007\u0007\u0002"+
 		"\b\u0007\b\u0002\t\u0007\t\u0002\n\u0007\n\u0002\u000b\u0007\u000b\u0002"+
