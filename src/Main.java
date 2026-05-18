@@ -44,5 +44,22 @@ public class Main {
 
         System.out.println("\n=== ÁRBOL SINTÁCTICO ===");
         System.out.println(tree.toStringTree(parser));
+
+        // ── ANÁLISIS SEMÁNTICO ─────────────────────────────────────────────
+        PatitoSemanticListener semantic = new PatitoSemanticListener();
+        ParseTreeWalker.DEFAULT.walk(semantic, tree);
+
+        System.out.println("\nDIRECTORIO DE FUNCIONES");
+        System.out.println(semantic.getFuncDirectory());
+
+        System.out.println("\nTABLA DE VARIABLES GLOBALES");
+        System.out.println(semantic.getGlobalVarTable());
+
+        if (semantic.hasErrors()) {
+            System.out.println("\nERRORES SEMÁNTICOS");
+            semantic.getErrors().forEach(System.out::println);
+        } else {
+            System.out.println("Análisis semántico OK.");
+        }
     }
 }
