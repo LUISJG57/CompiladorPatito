@@ -61,5 +61,9 @@ public class Main {
         } else {
             System.out.println("Análisis semántico OK.");
         }
+
+        // ── CUÁDRUPLOS ─────────────────────────────────────────────
+        System.out.println("\n=== CUÁDRUPLOS ===");
+        System.out.print(semantic.getQuadruples());
     }
 }

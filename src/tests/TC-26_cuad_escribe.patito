@@ -1,0 +1,9 @@
+programa cuadEscribe;
+vars
+    x : entero;
+inicio
+{
+    x = 7;
+    escribe("resultado=", x + 1, "fin");
+}
+fin

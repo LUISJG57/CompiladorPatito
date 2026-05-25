@@ -1,0 +1,18 @@
+programa cuadAnidados;
+vars
+    i, n, acum : entero;
+inicio
+{
+    acum = 0;
+    i = 0;
+    mientras (i < n) haz {
+        si (i != 0) {
+            acum = acum + i;
+        } sino {
+            acum = acum + 1;
+        };
+        i = i + 1;
+    };
+    escribe("acum=", acum);
+}
+fin

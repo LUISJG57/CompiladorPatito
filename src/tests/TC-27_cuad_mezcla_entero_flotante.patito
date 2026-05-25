@@ -1,0 +1,10 @@
+programa cuadMezcla;
+vars
+    a : entero;
+    b, r : flotante;
+inicio
+{
+    r = a + b;
+    r = (a * 2) / b;
+}
+fin

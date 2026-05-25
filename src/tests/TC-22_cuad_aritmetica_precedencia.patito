@@ -1,0 +1,10 @@
+programa cuadAritmetica;
+vars
+    a, b, c, resultado : entero;
+inicio
+{
+    resultado = a + b * c;
+    resultado = (a + b) * c;
+    resultado = a + b * c / 2 - 1;
+}
+fin
