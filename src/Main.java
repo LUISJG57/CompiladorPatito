@@ -55,6 +55,9 @@ public class Main {
         System.out.println("\nTABLA DE VARIABLES GLOBALES");
         System.out.println(semantic.getGlobalVarTable());
 
+        System.out.println("\nTABLA DE CONSTANTES (dirección -> literal)");
+        System.out.print(semantic.getConstants());
+
         if (semantic.hasErrors()) {
             System.out.println("\nERRORES SEMÁNTICOS");
             semantic.getErrors().forEach(System.out::println);
@@ -62,8 +65,26 @@ public class Main {
             System.out.println("Análisis semántico OK.");
         }
 
+        // ── LEYENDA dirección -> nombre (para leer los cuádruplos) ─────────
+        System.out.println("\n=== LEYENDA DIRECCIONES ===");
+        System.out.println("Globales:");
+        printVarAddresses(semantic.getGlobalVarTable());
+        for (FuncInfo f : semantic.getFuncDirectory().getAll().values()) {
+            System.out.println("Locales de " + f.name + ":");
+            printVarAddresses(f.localVars);
+        }
+        System.out.println("Constantes:");
+        semantic.getConstants().getLabels()
+            .forEach((addr, lit) -> System.out.printf("    %-6d -> %s%n", addr, lit));
+
         // ── CUÁDRUPLOS ─────────────────────────────────────────────
-        System.out.println("\n=== CUÁDRUPLOS ===");
+        System.out.println("\n=== CUÁDRUPLOS (con direcciones virtuales) ===");
         System.out.print(semantic.getQuadruples());
+    }
+
+    // Imprime las variables de una tabla como  dirección -> nombre : tipo
+    private static void printVarAddresses(VarTable table) {
+        table.getAll().values().forEach(v ->
+            System.out.printf("    %-6d -> %s : %s%n", v.address, v.name, v.type));
     }
 }

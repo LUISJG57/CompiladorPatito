@@ -15,27 +15,55 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     // non-null = dentro de una declaración de función
     private String currentFunc = null;
 
-    // ── ENTREGA 3: estructuras para generación de cuádruplos ──────────────
-    // PILA de operandos: contiene nombres de variables, valores de constantes y temporales.
-    private final Deque<String> operandStack = new ArrayDeque<>();
-    // PILA de tipos: tipo asociado a cada operando en operandStack (misma posición).
+    // ── Estructuras para generación de cuádruplos ───────────────────────────
+    // PILA de operandos: ahora contiene DIRECCIONES VIRTUALES (entrega 4).
+    private final Deque<Integer> operandStack = new ArrayDeque<>();
+    // PILA de tipos: tipo de cada operando (misma posición que operandStack).
     private final Deque<SemanticCube.Type> typeStack = new ArrayDeque<>();
-    // PILA de operadores: contiene "+", "-", "*", "/", "<", ">", "==", "!=" y "(" como fondo falso.
+    // PILA de operadores: "+ - * / < > == !=" y "(" como fondo falso.
     private final Deque<String> operatorStack = new ArrayDeque<>();
-    // PILA de saltos: índices de cuádruplos pendientes de patch (GOTO/GOTOF) o de retorno (while).
+    // PILA de saltos: índices de cuádruplos pendientes de FILL (GOTO/GOTOF) y retornos (while).
     private final Deque<Integer> jumpStack = new ArrayDeque<>();
-    // FILA de cuádruplos generados.
+    // PILA de llamadas: contexto de cada llamada a función en curso.
+    private final Deque<CallContext> callStack = new ArrayDeque<>();
+    // FILA de cuádruplos.
     private final QuadrupleQueue quads = new QuadrupleQueue();
-    // Contador de variables temporales (t1, t2, ...).
-    private int tempCount = 0;
+
+    // ── Memoria virtual y constantes (entrega 4) ────────────────────────────
+    private final VirtualMemory vm = new VirtualMemory();
+    private final ConstantTable constants = new ConstantTable(vm);
+
+    // Índice del GOTO inicial (cuádruplo 0) que salta a main.
+    private int mainGotoIdx = -1;
 
     private static final String FONDO_FALSO = "(";
 
+    // Contexto de una llamada en curso (para validar firma y contar parámetros).
+    private static class CallContext {
+        final FuncInfo func;  // null si la función no existe
+        int k = 1;            // contador de parámetro actual (1-based)
+        CallContext(FuncInfo func) { this.func = func; }
+    }
+
     // ============================================================
-    // SECCIÓN A — Manejo de funciones y variables (entrega 2)
+    // SECCIÓN A — Programa, funciones y variables
     // ============================================================
 
-    // Punto neurálgico 1: entrada a declaración de función -> registrar en directorio, cambiar alcance a local
+    // Cuádruplo 0: GOTO a main (se rellena al entrar al cuerpo principal).
+    @Override
+    public void enterPrograma(PatitoParser.ProgramaContext ctx) {
+        mainGotoIdx = quads.enqueue("GOTO", "_", "_", "?");
+    }
+
+    // Inicio del cuerpo main: rellenar el GOTO inicial con la dirección actual.
+    @Override
+    public void enterCuerpo(PatitoParser.CuerpoContext ctx) {
+        if (ctx.getParent() instanceof PatitoParser.ProgramaContext) {
+            quads.patchResult(mainGotoIdx, String.valueOf(quads.size()));
+        }
+    }
+
+    // Punto neurálgico: entrada a función -> registrar, abrir alcance local, marcar startQuad
     @Override
     public void enterFuncs(PatitoParser.FuncsContext ctx) {
         String funcName = ctx.ID().getText();
@@ -46,25 +74,35 @@ public class PatitoSemanticListener extends PatitoBaseListener {
                 + "]: Función doblemente declarada '" + funcName + "'");
         }
         currentFunc = funcName;
+        vm.pushLocalTempScope();                 // nuevo Activation Record: reiniciar local+temp
+        if (funcDirectory.contains(funcName)) {
+            funcDirectory.getFunc(funcName).startQuad = quads.size();   // CONT
+        }
     }
 
-    // Punto neurálgico 2: salida de declaración de función -> regresar al alcance global
+    // Punto neurálgico: salida de función -> guardar recursos, ENDFUNC, cerrar alcance
     @Override
     public void exitFuncs(PatitoParser.FuncsContext ctx) {
+        if (currentFunc != null && funcDirectory.contains(currentFunc)) {
+            int[] c = vm.currentLocalTempCounts();   // [locInt, locFlt, tmpInt, tmpFlt]
+            funcDirectory.getFunc(currentFunc).setResources(c[0], c[1], c[2], c[3]);
+        }
+        quads.enqueue("ENDFUNC", "_", "_", "_");
+        vm.popLocalTempScope();
         currentFunc = null;
     }
 
-    // Punto neurálgico 3: primer parámetro
+    // Punto neurálgico: primer parámetro -> dirección local + registro en firma
     @Override
     public void enterParams(PatitoParser.ParamsContext ctx) {
         if (currentFunc == null || !funcDirectory.contains(currentFunc)) return;
         FuncInfo func = funcDirectory.getFunc(currentFunc);
         String paramName = ctx.ID().getText();
         SemanticCube.Type paramType = parseType(ctx.tipo());
-        func.addParam(paramName, paramType);
+        func.addParam(paramName, paramType, vm.nextLocal(paramType));
     }
 
-    // Punto neurálgico 4: parámetros adicionales (COMA ID : tipo ...)
+    // Punto neurálgico: parámetros adicionales (COMA ID : tipo ...)
     @Override
     public void enterParamsP(PatitoParser.ParamsPContext ctx) {
         if (ctx.ID() == null) return; // alternativa vacía
@@ -72,18 +110,20 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         FuncInfo func = funcDirectory.getFunc(currentFunc);
         String paramName = ctx.ID().getText();
         SemanticCube.Type paramType = parseType(ctx.tipo());
-        func.addParam(paramName, paramType);
+        func.addParam(paramName, paramType, vm.nextLocal(paramType));
     }
 
-    // Punto neurálgico 5: cada línea de declaración  id1, id2 : tipo ;
+    // Punto neurálgico: cada línea de declaración id1, id2 : tipo ;  (globales o locales)
     @Override
     public void enterListDecl(PatitoParser.ListDeclContext ctx) {
         SemanticCube.Type type = parseType(ctx.tipo());
         List<String> ids = collectIds(ctx.listId());
         VarTable target = resolveVarTable();
+        boolean local = (currentFunc != null && funcDirectory.contains(currentFunc));
 
         for (String id : ids) {
-            if (!target.addVar(id, type)) {
+            int addr = local ? vm.nextLocal(type) : vm.nextGlobal(type);
+            if (!target.addVar(id, type, addr)) {
                 errors.add("SEMÁNTICO [línea " + ctx.tipo().getStart().getLine()
                     + "]: Variable doblemente declarada '" + id + "'");
             }
@@ -91,37 +131,37 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     }
 
     // ============================================================
-    // SECCIÓN B — Generación de cuádruplos (entrega 3)
+    // SECCIÓN B — Expresiones (operandos -> direcciones)
     // ============================================================
 
-    // ---- Operandos (puntos neurálgicos PN-A) ---------------------------------
-    // PN-A1: identificador o constante en factor -> push a pila de operandos y tipos
+    // PN-A1: identificador o constante -> push DIRECCIÓN + tipo
     @Override
     public void exitFactorBase(PatitoParser.FactorBaseContext ctx) {
         if (ctx.ID() != null) {
             String name = ctx.ID().getText();
-            SemanticCube.Type t = lookupVarType(name);
-            if (t == null) {
+            VarInfo v = lookupVar(name);
+            if (v == null) {
                 errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
                     + "]: Variable no declarada '" + name + "'");
-                t = SemanticCube.Type.ERROR;
+                operandStack.push(-1);
+                typeStack.push(SemanticCube.Type.ERROR);
+            } else {
+                operandStack.push(v.address);
+                typeStack.push(v.type);
             }
-            operandStack.push(name);
-            typeStack.push(t);
         } else { // constante
             PatitoParser.CteContext c = ctx.cte();
             if (c.CTE_INT() != null) {
-                operandStack.push(c.CTE_INT().getText());
+                operandStack.push(constants.getOrAdd(c.CTE_INT().getText(), SemanticCube.Type.ENTERO));
                 typeStack.push(SemanticCube.Type.ENTERO);
             } else {
-                operandStack.push(c.CTE_FLOAT().getText());
+                operandStack.push(constants.getOrAdd(c.CTE_FLOAT().getText(), SemanticCube.Type.FLOTANTE));
                 typeStack.push(SemanticCube.Type.FLOTANTE);
             }
         }
     }
 
-    // ---- Paréntesis (PN-B) ---------------------------------------------------
-    // PN-B1: al entrar a un "(", se mete un fondo falso a la pila de operadores
+    // PN-B1: "(" -> fondo falso
     @Override
     public void enterFactor(PatitoParser.FactorContext ctx) {
         if (ctx.PARENTESISIZQ() != null) {
@@ -129,10 +169,7 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         }
     }
 
-    // PN-B2 / PN-C1: al salir de un factor:
-    //   - si fue "(expresion)", saca el fondo falso
-    //   - si fue factorBase, aplica el signo unario si lo hay
-    //   - en ambos casos, intenta resolver una operación * o / pendiente
+    // PN-B2 / PN-C1: cerrar factor -> quitar fondo falso o aplicar signo, y resolver *,/
     @Override
     public void exitFactor(PatitoParser.FactorContext ctx) {
         if (ctx.PARENTESISIZQ() != null) {
@@ -140,39 +177,36 @@ public class PatitoSemanticListener extends PatitoBaseListener {
                 operatorStack.pop();
             }
         } else if (ctx.factorBase() != null) {
-            // signo unario opcional (solo MENOS amerita cuádruplo NEG)
+            // signo unario opcional (sólo MENOS amerita cuádruplo NEG)
             if (ctx.signoOpcional() != null && ctx.signoOpcional().MENOS() != null) {
-                String operand = operandStack.pop();
+                int operand = operandStack.pop();
                 SemanticCube.Type t = typeStack.pop();
-                String temp = newTemp();
-                quads.enqueue("NEG", operand, "_", temp);
+                int temp = vm.nextTemp(t);
+                quads.enqueue("NEG", String.valueOf(operand), "_", String.valueOf(temp));
                 operandStack.push(temp);
                 typeStack.push(t);
             }
         }
-        // Tras tener un operando arriba, vemos si hay un *,/ que resolver
         if (topOperatorIsOneOf("*", "/")) {
             generateBinaryQuadruple();
         }
     }
 
-    // ---- Operadores * y / (PN-C) --------------------------------------------
-    // PN-C2: al entrar a terminoP, si comienza con * o /, se mete a la pila
+    // PN-C2: * o / -> push a la pila de operadores
     @Override
     public void enterTerminoP(PatitoParser.TerminoPContext ctx) {
         if (ctx.POR() != null) operatorStack.push("*");
         else if (ctx.ENTRE() != null) operatorStack.push("/");
     }
 
-    // ---- Operadores + y - (PN-D) --------------------------------------------
-    // PN-D1: al entrar a expP, si comienza con + o -, se mete a la pila
+    // PN-D1: + o - -> push a la pila de operadores
     @Override
     public void enterExpP(PatitoParser.ExpPContext ctx) {
         if (ctx.MAS() != null) operatorStack.push("+");
         else if (ctx.MENOS() != null) operatorStack.push("-");
     }
 
-    // PN-D2: tras cerrar un termino, intentar resolver un + o - pendiente
+    // PN-D2: cerrar termino -> resolver + o - pendiente
     @Override
     public void exitTermino(PatitoParser.TerminoContext ctx) {
         if (topOperatorIsOneOf("+", "-")) {
@@ -180,8 +214,7 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         }
     }
 
-    // ---- Operadores relacionales (PN-E) --------------------------------------
-    // PN-E1: tras leer un operador relacional, lo metemos a la pila
+    // PN-E1: operador relacional -> push
     @Override
     public void exitOpRel(PatitoParser.OpRelContext ctx) {
         if (ctx.MENORQUE() != null) operatorStack.push("<");
@@ -190,80 +223,83 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         else if (ctx.DIFERENTE() != null) operatorStack.push("!=");
     }
 
-    // PN-E2: al cerrar expresion, si hay un relacional arriba, lo resolvemos
-    // y luego, según el padre, generamos el GOTOF de un si/mientras.
+    // PN-E2: cerrar expresion -> resolver relacional y despachar según el contexto (padre)
     @Override
     public void exitExpresion(PatitoParser.ExpresionContext ctx) {
         if (topOperatorIsOneOf("<", ">", "==", "!=")) {
             generateBinaryQuadruple();
         }
 
-        // PN-F1: si la expresion es la condición de un si o un mientras, generar GOTOF
         ParserRuleContext parent = ctx.getParent();
         if (parent instanceof PatitoParser.CondicionContext
             || parent instanceof PatitoParser.CicloContext) {
+            // condición de un si/mientras -> GOTOF
             generateConditionalGoToF(ctx.getStart().getLine());
+        } else if (parent instanceof PatitoParser.ArgsContext
+                || parent instanceof PatitoParser.ArgsPContext) {
+            // argumento de una llamada -> PARAMETER
+            processArgument(ctx.getStart().getLine());
         }
+        // otros padres (asigna, elemImp, factor): el resultado queda en la pila
     }
 
-    // ---- Asignación (PN-G) ---------------------------------------------------
-    // PN-G1: al cerrar la asignación, sacamos el resultado de expresion y emitimos "="
+    // ============================================================
+    // SECCIÓN C — Estatutos lineales
+    // ============================================================
+
+    // PN-G1: asignación -> "=" con direcciones
     @Override
     public void exitAsigna(PatitoParser.AsignaContext ctx) {
-        if (operandStack.isEmpty()) return; // expresion falló (error semántico previo)
+        if (operandStack.isEmpty()) return;
 
-        String exprResult = operandStack.pop();
+        int exprResult = operandStack.pop();
         SemanticCube.Type exprType = typeStack.pop();
 
         String target = ctx.ID().getText();
-        SemanticCube.Type targetType = lookupVarType(target);
-        if (targetType == null) {
+        VarInfo tv = lookupVar(target);
+        if (tv == null) {
             errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
                 + "]: Variable no declarada '" + target + "'");
             return;
         }
-
-        // Verificación de tipos: el cubo se consulta usando "=" como operación virtual
-        if (!isAssignable(targetType, exprType)) {
+        if (!isAssignable(tv.type, exprType)) {
             errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
                 + "]: Tipos incompatibles en asignación a '" + target
-                + "' (" + targetType + " = " + exprType + ")");
+                + "' (" + tv.type + " = " + exprType + ")");
             return;
         }
-
-        quads.enqueue("=", exprResult, "_", target);
+        quads.enqueue("=", String.valueOf(exprResult), "_", String.valueOf(tv.address));
     }
 
-    // ---- escribe (PN-H) ------------------------------------------------------
-    // PN-H1: cada elemento de la lista de impresión genera un PRINT
+    // PN-H1: cada elemento de escribe -> PRINT
     @Override
     public void exitElemImp(PatitoParser.ElemImpContext ctx) {
         if (ctx.LETRERO() != null) {
-            quads.enqueue("PRINT", ctx.LETRERO().getText(), "_", "_");
-        } else { // expresion
+            int addr = constants.getOrAddString(ctx.LETRERO().getText());
+            quads.enqueue("PRINT", String.valueOf(addr), "_", "_");
+        } else {
             if (operandStack.isEmpty()) return;
-            String val = operandStack.pop();
+            int val = operandStack.pop();
             typeStack.pop();
-            quads.enqueue("PRINT", val, "_", "_");
+            quads.enqueue("PRINT", String.valueOf(val), "_", "_");
         }
     }
 
-    // ---- Condicional si / sino (PN-F) ----------------------------------------
-    // PN-F2: al entrar al sinoOpcional, si tiene SINO, generamos GOTO y patch del GOTOF
+    // ============================================================
+    // SECCIÓN D — Estatutos no-lineales (si/sino, mientras)
+    // ============================================================
+
+    // PN-F2: entrar a sinoOpcional con SINO -> GOTO + FILL del GOTOF
     @Override
     public void enterSinoOpcional(PatitoParser.SinoOpcionalContext ctx) {
         if (ctx.SINO() == null) return;
-
-        // Emitir GOTO que saltará al final del si/sino (destino se rellena en exitCondicion)
         int gotoIdx = quads.enqueue("GOTO", "_", "_", "?");
-        // Patch del GOTOF previo: debe saltar al primer cuádruplo del else,
-        // que es el siguiente al GOTO recién emitido.
         int pendingGotoF = jumpStack.pop();
         quads.patchResult(pendingGotoF, String.valueOf(quads.size()));
         jumpStack.push(gotoIdx);
     }
 
-    // PN-F3: al cerrar la condicion, patch del último salto pendiente (GOTOF o GOTO según haya sino)
+    // PN-F3: cerrar condicion -> FILL del salto pendiente
     @Override
     public void exitCondicion(PatitoParser.CondicionContext ctx) {
         if (jumpStack.isEmpty()) return;
@@ -271,19 +307,16 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         quads.patchResult(pending, String.valueOf(quads.size()));
     }
 
-    // ---- Ciclo mientras (PN-I) -----------------------------------------------
-    // PN-I1: al entrar al ciclo, recordar el inicio de la condición
+    // PN-I1: entrar al ciclo -> recordar inicio de la condición
     @Override
     public void enterCiclo(PatitoParser.CicloContext ctx) {
-        jumpStack.push(quads.size()); // donde inicia la evaluación de la condición
+        jumpStack.push(quads.size());
     }
 
-    // (el GOTOF lo emite exitExpresion al detectar parent=CicloContext)
-
-    // PN-I2: al cerrar el ciclo, emitir GOTO al inicio y patch del GOTOF
+    // PN-I2: cerrar ciclo -> GOTO al inicio + FILL del GOTOF
     @Override
     public void exitCiclo(PatitoParser.CicloContext ctx) {
-        if (jumpStack.size() < 2) return; // hubo error previo
+        if (jumpStack.size() < 2) return;
         int pendingGotoF = jumpStack.pop();
         int condStart    = jumpStack.pop();
         quads.enqueue("GOTO", "_", "_", String.valueOf(condStart));
@@ -291,16 +324,82 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     }
 
     // ============================================================
-    // SECCIÓN C — Helpers
+    // SECCIÓN E — Funciones: llamada (ERA / PARAMETER / GOSUB)
     // ============================================================
 
-    // Resuelve la operación binaria con el operador en la cima de la pila.
-    // Saca dos operandos + dos tipos + un operador y emite un cuádruplo,
-    // dejando el temporal resultado en la pila.
+    // PN-J1: entrar a llamada -> verificar existencia, ERA, abrir contexto de llamada
+    @Override
+    public void enterLlamada(PatitoParser.LlamadaContext ctx) {
+        String funcName = ctx.ID().getText();
+
+        // Patito sólo tiene funciones nula: no pueden usarse dentro de una expresión.
+        if (ctx.getParent() instanceof PatitoParser.FactorContext) {
+            errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
+                + "]: No se puede usar una función dentro de una expresión "
+                + "(Patito sólo tiene funciones nula): '" + funcName + "'");
+        }
+
+        FuncInfo f = funcDirectory.getFunc(funcName);
+        if (f == null) {
+            errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
+                + "]: Función no declarada '" + funcName + "'");
+            callStack.push(new CallContext(null)); // mantener balance de la pila
+            return;
+        }
+        quads.enqueue("ERA", funcName, "_", String.valueOf(f.eraSize));
+        callStack.push(new CallContext(f));
+    }
+
+    // PN-J3: argumento -> validar tipo vs firma + PARAMETER
+    private void processArgument(int line) {
+        if (callStack.isEmpty() || operandStack.isEmpty()) return;
+        CallContext call = callStack.peek();
+
+        int argAddr = operandStack.pop();
+        SemanticCube.Type argType = typeStack.pop();
+
+        if (call.func != null) {
+            if (call.k <= call.func.params.size()) {
+                SemanticCube.Type paramType = call.func.params.get(call.k - 1).type;
+                if (!isAssignable(paramType, argType)) {
+                    errors.add("SEMÁNTICO [línea " + line + "]: Tipo del argumento #" + call.k
+                        + " incompatible en llamada a '" + call.func.name + "' (esperaba "
+                        + paramType + ", recibió " + argType + ")");
+                }
+            } else {
+                errors.add("SEMÁNTICO [línea " + line + "]: Demasiados argumentos en llamada a '"
+                    + call.func.name + "'");
+            }
+        }
+        quads.enqueue("PARAMETER", String.valueOf(argAddr), "_", String.valueOf(call.k));
+        call.k++;
+    }
+
+    // PN-J6: cerrar llamada -> validar aridad + GOSUB
+    @Override
+    public void exitLlamada(PatitoParser.LlamadaContext ctx) {
+        if (callStack.isEmpty()) return;
+        CallContext call = callStack.pop();
+        if (call.func == null) return; // ya se reportó "no declarada"
+
+        int argsGiven = call.k - 1;
+        int expected  = call.func.params.size();
+        if (argsGiven != expected) {
+            errors.add("SEMÁNTICO [línea " + ctx.ID().getSymbol().getLine()
+                + "]: Número de argumentos incorrecto en '" + call.func.name
+                + "' (esperaba " + expected + ", recibió " + argsGiven + ")");
+        }
+        quads.enqueue("GOSUB", call.func.name, "_", String.valueOf(call.func.startQuad));
+    }
+
+    // ============================================================
+    // SECCIÓN F — Helpers
+    // ============================================================
+
     private void generateBinaryQuadruple() {
         String op = operatorStack.pop();
-        String right = operandStack.pop();
-        String left  = operandStack.pop();
+        int right = operandStack.pop();
+        int left  = operandStack.pop();
         SemanticCube.Type rightT = typeStack.pop();
         SemanticCube.Type leftT  = typeStack.pop();
 
@@ -309,24 +408,24 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         if (resultType == SemanticCube.Type.ERROR) {
             errors.add("SEMÁNTICO: Tipos incompatibles para operador '" + op
                 + "' entre " + leftT + " y " + rightT);
+            resultType = SemanticCube.Type.ENTERO; // continuar para no romper la pila
         }
 
-        String temp = newTemp();
-        quads.enqueue(op, left, right, temp);
+        int temp = vm.nextTemp(resultType);
+        quads.enqueue(op, String.valueOf(left), String.valueOf(right), String.valueOf(temp));
         operandStack.push(temp);
         typeStack.push(resultType);
     }
 
-    // Emite el GOTOF asociado a la condición de un si/mientras.
     private void generateConditionalGoToF(int line) {
         if (operandStack.isEmpty()) return;
-        String cond = operandStack.pop();
+        int cond = operandStack.pop();
         SemanticCube.Type t = typeStack.pop();
         if (t != SemanticCube.Type.ENTERO && t != SemanticCube.Type.ERROR) {
             errors.add("SEMÁNTICO [línea " + line
                 + "]: La condición debe ser de tipo entero, se obtuvo " + t);
         }
-        int idx = quads.enqueue("GOTOF", cond, "_", "?");
+        int idx = quads.enqueue("GOTOF", String.valueOf(cond), "_", "?");
         jumpStack.push(idx);
     }
 
@@ -335,10 +434,6 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         String top = operatorStack.peek();
         for (String o : ops) if (o.equals(top)) return true;
         return false;
-    }
-
-    private String newTemp() {
-        return "t" + (++tempCount);
     }
 
     private SemanticCube.Operator mapOperator(String op) {
@@ -355,7 +450,7 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         }
     }
 
-    // Patito sólo tiene entero y flotante. Se permite asignar entero a flotante y al revés.
+    // Patito sólo tiene entero y flotante. Se permite conversión implícita entre ambos.
     private boolean isAssignable(SemanticCube.Type target, SemanticCube.Type expr) {
         if (target == SemanticCube.Type.ERROR || expr == SemanticCube.Type.ERROR) return true;
         return target == expr
@@ -363,7 +458,6 @@ public class PatitoSemanticListener extends PatitoBaseListener {
             || (target == SemanticCube.Type.ENTERO   && expr == SemanticCube.Type.FLOTANTE);
     }
 
-    // Si estamos dentro de una función: tabla local; si no, tabla global.
     private VarTable resolveVarTable() {
         if (currentFunc != null && funcDirectory.contains(currentFunc)) {
             return funcDirectory.getFunc(currentFunc).localVars;
@@ -372,13 +466,12 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     }
 
     // Busca primero en locales de la función actual, luego en globales.
-    private SemanticCube.Type lookupVarType(String name) {
+    private VarInfo lookupVar(String name) {
         if (currentFunc != null && funcDirectory.contains(currentFunc)) {
             VarInfo v = funcDirectory.getFunc(currentFunc).localVars.getVar(name);
-            if (v != null) return v.type;
+            if (v != null) return v;
         }
-        VarInfo v = globalVarTable.getVar(name);
-        return v == null ? null : v.type;
+        return globalVarTable.getVar(name);
     }
 
     private List<String> collectIds(PatitoParser.ListIdContext ctx) {
@@ -404,7 +497,7 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     }
 
     // ============================================================
-    // SECCIÓN D — Acceso público
+    // SECCIÓN G — Acceso público
     // ============================================================
 
     public FuncDirectory   getFuncDirectory()  { return funcDirectory; }
@@ -412,4 +505,6 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     public List<String>    getErrors()         { return errors; }
     public boolean         hasErrors()         { return !errors.isEmpty(); }
     public QuadrupleQueue  getQuadruples()     { return quads; }
+    public ConstantTable   getConstants()      { return constants; }
+    public VirtualMemory   getVirtualMemory()  { return vm; }
 }

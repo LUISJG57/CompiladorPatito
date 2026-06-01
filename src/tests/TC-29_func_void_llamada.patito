@@ -1,0 +1,19 @@
+programa cuadFuncion;
+vars
+    g : entero;
+nula suma(a : entero, b : entero)
+vars
+    r : entero;
+{
+    {
+        r = a + b;
+        escribe("suma=", r);
+    }
+};
+inicio
+{
+    g = 5;
+    suma(g, 3);
+    suma(1, 2);
+}
+fin

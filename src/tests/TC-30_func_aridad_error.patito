@@ -1,0 +1,15 @@
+programa cuadFuncionError;
+vars
+    g : entero;
+nula dos(a : entero, b : entero)
+{
+    {
+        escribe(a, b);
+    }
+};
+inicio
+{
+    dos(g);
+    noExiste(1);
+}
+fin

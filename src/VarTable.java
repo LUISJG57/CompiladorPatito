@@ -5,10 +5,11 @@ public class VarTable {
     // LinkedHashMap preserva orden de inserción (útil para imprimir/depurar)
     private final Map<String, VarInfo> table = new LinkedHashMap<>();
 
-    // Retorna true si se agregó, false si ya existía (variable doblemente declarada)
-    public boolean addVar(String name, SemanticCube.Type type) {
+    // Retorna true si se agregó, false si ya existía (variable doblemente declarada).
+    // La dirección virtual la calcula el listener (sabe el alcance) y se la pasa aquí.
+    public boolean addVar(String name, SemanticCube.Type type, int address) {
         if (table.containsKey(name)) return false;
-        table.put(name, new VarInfo(name, type));
+        table.put(name, new VarInfo(name, type, address));
         return true;
     }
 
