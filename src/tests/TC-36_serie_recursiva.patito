@@ -1,0 +1,15 @@
+programa serieRecursiva;
+nula serie(n : entero)
+{
+    {
+        si (n < 101) {
+            escribe(n);
+            serie(n + 1);
+        };
+    }
+};
+inicio
+{
+    serie(1);
+}
+fin

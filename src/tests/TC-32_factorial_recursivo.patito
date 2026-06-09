@@ -1,0 +1,24 @@
+programa factorialRecursivo;
+vars
+    n, resultado : entero;
+nula factRec(k : entero)
+{
+    {
+        si (k < 2) {
+            resultado = 1;
+        } sino {
+            factRec(k - 1);
+            resultado = resultado * k;
+        };
+    }
+};
+inicio
+{
+    n = 1;
+    mientras (n < 11) haz {
+        factRec(n);
+        escribe(n, resultado);
+        n = n + 1;
+    };
+}
+fin

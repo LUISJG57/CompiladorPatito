@@ -1,5 +1,9 @@
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Map;
 
 public class Main {
     public static void main(String[] args) throws Exception {
@@ -27,7 +31,8 @@ public class Main {
         // ── PARSER ─────────────────────────────────────────
         PatitoParser parser = new PatitoParser(tokens);
 
-        // Listener de errores personalizado (muestra errores claros)
+        // Listener de errores personalizado (muestra errores claros y cuenta cuántos hubo)
+        final int[] syntaxErrors = {0};
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener() {
             @Override
@@ -35,6 +40,7 @@ public class Main {
                                     Object offendingSymbol,
                                     int line, int charPos,
                                     String msg, RecognitionException e) {
+                syntaxErrors[0]++;
                 System.err.printf("ERROR SINTÁCTICO línea %d:%d → %s%n",
                     line, charPos, msg);
             }
@@ -80,11 +86,47 @@ public class Main {
         // ── CUÁDRUPLOS ─────────────────────────────────────────────
         System.out.println("\n=== CUÁDRUPLOS (con direcciones virtuales) ===");
         System.out.print(semantic.getQuadruples());
+
+        // ── OBJ + EJECUCIÓN EN LA MÁQUINA VIRTUAL ──────────────────────────
+        boolean canRun = !semantic.hasErrors() && syntaxErrors[0] == 0;
+        if (canRun) {
+            String objPath = (args.length > 0 ? args[0] : "program") + ".pobj";
+            writeObjFile(objPath, semantic.getQuadruples(), semantic.getConstants());
+            System.out.println("\n(Archivo objeto generado: " + objPath + ")");
+
+            System.out.println("\n=== EJECUCIÓN (Máquina Virtual) ===");
+            VirtualMachine.load(objPath).run();
+        } else {
+            System.out.println("\n(No se ejecuta la Máquina Virtual: el programa tiene errores)");
+        }
     }
 
     // Imprime las variables de una tabla como  dirección -> nombre : tipo
     private static void printVarAddresses(VarTable table) {
         table.getAll().values().forEach(v ->
             System.out.printf("    %-6d -> %s : %s%n", v.address, v.name, v.type));
+    }
+
+    // Escribe el archivo objeto (.pobj): constantes + cuádruplos.
+    // Es lo único que la Máquina Virtual necesita para ejecutar.
+    private static void writeObjFile(String path, QuadrupleQueue quads, ConstantTable constants)
+            throws IOException {
+        try (PrintWriter pw = new PrintWriter(new FileWriter(path))) {
+            pw.println("%%CONSTANTS");
+            for (Map.Entry<Integer, String> e : constants.getLabels().entrySet()) {
+                int addr = e.getKey();
+                String lit = e.getValue();
+                String type, val;
+                if (addr >= VirtualMemory.CONST_STR_BASE)        { type = "STR";   val = VirtualMachine.escape(lit); }
+                else if (addr >= VirtualMemory.CONST_FLOAT_BASE)  { type = "FLOAT"; val = lit; }
+                else                                              { type = "INT";   val = lit; }
+                pw.println(addr + " " + type + " " + val);
+            }
+            pw.println("%%QUADRUPLES");
+            for (Quadruple q : quads.getAll()) {
+                pw.println(q.id + " " + q.op + " " + q.leftOp + " " + q.rightOp + " " + q.result);
+            }
+            pw.println("%%END");
+        }
     }
 }

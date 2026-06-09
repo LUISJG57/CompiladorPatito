@@ -1,0 +1,18 @@
+programa tiposCondicion;
+vars
+    a : entero;
+    divEnt, divFlot : flotante;
+inicio
+{
+    a = 7;
+    divEnt = a / 2;
+    divFlot = a / 2.0;
+    escribe("7 / 2   (entero entre entero) =", divEnt);
+    escribe("7 / 2.0 (entero entre flotante) =", divFlot);
+    si (a > 5) {
+        escribe("a si es mayor que 5");
+    } sino {
+        escribe("a no es mayor que 5");
+    };
+}
+fin

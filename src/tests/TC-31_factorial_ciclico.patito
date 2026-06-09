@@ -1,0 +1,18 @@
+programa factorialCiclico;
+vars
+    n, i, fact : entero;
+inicio
+{
+    n = 1;
+    mientras (n < 11) haz {
+        fact = 1;
+        i = 1;
+        mientras (i < n) haz {
+            i = i + 1;
+            fact = fact * i;
+        };
+        escribe(n, fact);
+        n = n + 1;
+    };
+}
+fin

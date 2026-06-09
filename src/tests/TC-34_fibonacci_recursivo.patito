@@ -1,0 +1,29 @@
+programa fibonacciRecursivo;
+vars
+    n, fib : entero;
+nula fibRec(k : entero)
+vars
+    a : entero;
+{
+    {
+        si (k < 2) {
+            fib = k;
+        } sino {
+            fibRec(k - 1);
+            a = fib;
+            fibRec(k - 2);
+            fib = a + fib;
+        };
+    }
+};
+inicio
+{
+    escribe("Fibonacci recursivo:");
+    n = 0;
+    mientras (n < 10) haz {
+        fibRec(n);
+        escribe(fib);
+        n = n + 1;
+    };
+}
+fin

@@ -1,0 +1,18 @@
+programa fibonacciCiclico;
+vars
+    a, b, temp, i : entero;
+inicio
+{
+    a = 0;
+    b = 1;
+    i = 1;
+    escribe("Fibonacci:");
+    mientras (i < 16) haz {
+        escribe(a);
+        temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    };
+}
+fin

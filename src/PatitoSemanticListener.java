@@ -55,6 +55,12 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         mainGotoIdx = quads.enqueue("GOTO", "_", "_", "?");
     }
 
+    // Fin del programa: cuádruplo END para que la Máquina Virtual detenga la ejecución.
+    @Override
+    public void exitPrograma(PatitoParser.ProgramaContext ctx) {
+        quads.enqueue("END", "_", "_", "_");
+    }
+
     // Inicio del cuerpo main: rellenar el GOTO inicial con la dirección actual.
     @Override
     public void enterCuerpo(PatitoParser.CuerpoContext ctx) {
@@ -135,7 +141,7 @@ public class PatitoSemanticListener extends PatitoBaseListener {
     // ============================================================
 
     // PN-A1: identificador o constante -> push DIRECCIÓN + tipo
-    @Override
+    @Override 
     public void exitFactorBase(PatitoParser.FactorBaseContext ctx) {
         if (ctx.ID() != null) {
             String name = ctx.ID().getText();
@@ -358,20 +364,24 @@ public class PatitoSemanticListener extends PatitoBaseListener {
         int argAddr = operandStack.pop();
         SemanticCube.Type argType = typeStack.pop();
 
+        // El destino del PARAMETER es la DIRECCIÓN VIRTUAL del parámetro #k (no su número),
+        // para que la Máquina Virtual copie el valor directo a esa celda del nuevo AR.
+        int paramAddr = -1;
         if (call.func != null) {
             if (call.k <= call.func.params.size()) {
-                SemanticCube.Type paramType = call.func.params.get(call.k - 1).type;
-                if (!isAssignable(paramType, argType)) {
+                VarInfo param = call.func.params.get(call.k - 1);
+                paramAddr = param.address;
+                if (!isAssignable(param.type, argType)) {
                     errors.add("SEMÁNTICO [línea " + line + "]: Tipo del argumento #" + call.k
                         + " incompatible en llamada a '" + call.func.name + "' (esperaba "
-                        + paramType + ", recibió " + argType + ")");
+                        + param.type + ", recibió " + argType + ")");
                 }
             } else {
                 errors.add("SEMÁNTICO [línea " + line + "]: Demasiados argumentos en llamada a '"
                     + call.func.name + "'");
             }
         }
-        quads.enqueue("PARAMETER", String.valueOf(argAddr), "_", String.valueOf(call.k));
+        quads.enqueue("PARAMETER", String.valueOf(argAddr), "_", String.valueOf(paramAddr));
         call.k++;
     }
 

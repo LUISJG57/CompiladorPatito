@@ -1,0 +1,26 @@
+programa pelos;
+vars
+    i, d, resUno, resDos : entero;
+
+nula uno(x : entero)
+{
+    {
+        resUno = x * 2;
+    }
+};
+
+nula dos(x : entero)
+{
+    {
+        uno(x);
+        resDos = x * resUno;
+    }
+};
+
+inicio
+{
+    i = 5;
+    dos(i + 3 - 1);
+    escribe(resDos);
+}
+fin

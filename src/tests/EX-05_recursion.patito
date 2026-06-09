@@ -1,0 +1,20 @@
+programa recursion;
+vars
+    cuantos : entero;
+nula cuenta(n : entero)
+{
+    {
+        si (n > 0) {
+            escribe(n);
+            cuenta(n - 1);
+        };
+    }
+};
+inicio
+{
+    cuantos = 3;
+    escribe("cuenta regresiva:");
+    cuenta(cuantos);
+    escribe("despegue!");
+}
+fin
